@@ -1,4 +1,6 @@
-$sshkey = "$HOME\.ssh\burgos"
+#!/usr/bin/env pwsh
+
+$sshkey = "$HOME/.ssh/burgos"
 
 if (Test-Path -Path $sshkey) {
     if ($args.Length -eq 0) {
@@ -18,24 +20,30 @@ if (Test-Path -Path $sshkey) {
         $config = "/home/$site_domain/$sub_dir/wp-config.php"
         $config_content = ssh $ssh_profile -i $sshkey "cat $config"
 
-        # Regex pattern to extract database name from wp-config.php
-        $db_name = if ($config_content -match "'DB_NAME',\s*'([^']+)'") {
-            $matches[1]
-        } else {
-            Write-Error "Nome do banco de dados não encontrado no arquivo wp-config.php."
-            exit
-        }
+        $lines = $config_content -split "`n"        
+        $dbName = $null
 
-        ssh $ssh_profile -i $sshkey "mysqldump $db_name > database.sql" -ErrorAction Stop
+        foreach ($line in $lines) {
+            if ($line -match "define\(\s*'DB_NAME'") {
+                # Split the line at the comma, take the second part, and clean it up
+                $dbNamePart = $line -split ',' | Select-Object -Index 1
+                $dbName = $dbNamePart -replace "[^a-zA-Z0-9_]", ""  # Remove all non-alphanumeric characters except underscore
+                break  # Exit the loop once the database name is found
+            }
+        }
+        
+        Write-Output "recuperado nome do banco: $dbName"
+        
+        ssh $ssh_profile -i $sshkey "mysqldump $db_name > database.sql"
 
         Write-Output "Comprimindo site para o domínio: $site_domain"
-        ssh $ssh_profile -i $sshkey "zip -r wordpress.zip /home/$site_domain/$sub_dir ~/database.sql" -ErrorAction Stop
+        ssh $ssh_profile -i $sshkey "zip -r wordpress.zip /home/$site_domain/$sub_dir ~/database.sql"
 
         Write-Output "Baixando zip"
-        scp "${ssh_profile}:~/wordpress.zip" "." -i $sshkey -ErrorAction Stop
+        scp -i $sshkey "${ssh_profile}:~/wordpress.zip" "."
 
         Write-Output "Excluindo zip do servidor"
-        ssh $ssh_profile -i $sshkey "rm -rf ~/wordpress.zip" -ErrorAction Stop
+        ssh $ssh_profile -i $sshkey "rm -rf ~/wordpress.zip ~/database.sql"
     }
 } else {
     Write-Output "Chave SSH não encontrada, peça pro Mizael."
