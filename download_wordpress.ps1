@@ -33,17 +33,24 @@ if (Test-Path -Path $sshkey) {
         }
         
         Write-Output "recuperado nome do banco: $dbName"
-        
-        ssh -i $sshkey $ssh_profile "mysqldump $dbName > database.sql"
+
+        Write-Output "exportando banco de dados"
+        ssh -i $sshkey $ssh_profile "mkdir -p ~/files; mysqldump $dbName > ./files/$dbName.sql"
+
+        if ($site_subdomain) { 
+            $file_name = $site_subdomain 
+        } else { 
+            $file_name = $site_domain 
+        }
 
         Write-Output "Comprimindo site para o domínio: $site_domain"
-        ssh $ssh_profile -i $sshkey "zip -r wordpress.zip /home/$site_domain/$sub_dir ~/database.sql"
+        ssh $ssh_profile -i $sshkey "cp -r /home/$site_domain/$sub_dir/* ~/files/ ; zip -r $file_name.zip files/"
 
         Write-Output "Baixando zip"
-        scp -i $sshkey "${ssh_profile}:~/wordpress.zip" "."
+        scp -i $sshkey "${ssh_profile}:~/$file_name.zip" "."
 
         Write-Output "Excluindo zip do servidor"
-        ssh $ssh_profile -i $sshkey "rm -rf ~/wordpress.zip ~/database.sql"
+        ssh $ssh_profile -i $sshkey "rm -rf ~/$file_name.zip ~/files"
     }
 } else {
     Write-Output "Chave SSH não encontrada, peça pro Mizael."
